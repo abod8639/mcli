@@ -169,7 +169,7 @@ Defined in `mcli.h`:
 ### Git Submodule
 
 ```bash
-git submodule add <repo-url> libs/mcli
+git submodule add https://github.com/ryanfkeller/mcli.git libs/mcli
 ```
 
 Include with:
