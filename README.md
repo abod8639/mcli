@@ -13,6 +13,10 @@ An embedded command-line interface that targets bare-metal or resource constrain
 - **Hardware Agnostic**: Abstracted IO interface that works with different communication methods
 - **Minimal Footprint**: Keep it small enough for microcontrollers.
 
+## Example Usage
+ESP32 via WiFi STA:
+
+![ESP32 WiFi MCLI Example](https://github.com/ryanfkeller/mcli-examples/blob/main/assets/esp32_wifi_sta_mcli.gif "ESP32 WiFi MCLI Example")
 
 ## Looking for Feedback On
 - Portability across different platforms
