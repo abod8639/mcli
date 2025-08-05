@@ -19,7 +19,7 @@ class ArduinoSerialIo : public mcli::CliIoInterface {
             stream_.write(c);
         }
         char get_byte() override {
-            while (!byte_available()) {}
+            if (!byte_available()) return 0;
             return stream_.read();
         }
         bool byte_available() override {

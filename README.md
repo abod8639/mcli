@@ -1,49 +1,63 @@
 # MCLI: Minimal Command-Line Interface for Embedded Systems
 
-A lightweight, embedded-friendly command-line interface (CLI) library designed for bare-metal or constrained systems.  
+A work-in-progress experiment in building a lightweight CLI library for constrained embedded systems.
 
-## Features
+## What This Is
+An embedded command-line interface that targets bare-metal or resource constrained systems. The idea is to provide basic CLI functionality without requiring dynamic memory or heavy dependencies. 
 
-- **Hardware Agnostic**: Works with any transport (UART, USB, etc.) via pluggable I/O interface
-- **No Dynamic Memory**: Statically defined commands and fixed-size buffers
-- **Application Context Support**: Fully type-safe template-based context injection
-- **Extensible**: Drop-in commands and portable I/O adapters
-- **Arduino-Friendly**: Includes ready-made adapter for Arduino `Stream`-based devices
+**Current state:** Early prototype that works for my use cases (i.e., dev boards I own). Arduino Serial, ESP32 UART, and ESP32 STA WiFi examples are available [here](). I'm working to make a UART adapter for the Microblaze V soft-core processor.
+
+## Design Goals
+- **No Dynamic Memory:** The CLI engine itself only uses static buffers, though some platform adapters may use system services that allocate internally (ESP wifi, etc.) 
+- **Template-Based Context:** Inject your application context for cleaner, testable command functions
+- **Hardware Agnostic**: Abstracted IO interface that works with different communication methods
+- **Minimal Footprint**: Keep it small enough for microcontrollers.
+
+
+## Looking for Feedback On
+- Portability across different platforms
+- Memory optimization opportunities  
+- API design choices (especially the template approach)
+- Missing features that would make this more useful
+
+Feel free to open issues or PRs with suggestions!
 
 ---
 
-## Quick Start
+## Basic Usage Example
 
-### 1. Define Your Application Context
+### 1. Implement or Include an I/O Adapter
 
-The application context is a user-defined struct that holds references to all hardware interfaces, drivers, or other dependencies your CLI commands need. Passing this context into command functions allows for clean dependency injection, keeping your commands modular and testable.
+The I/O adapter connects the CLI engine to your device’s communication interface 
 
+Adapters extend `CliIoInterface` to add platform-specific communication, while `CliIoInterface` provides higher level functionality (`print`, `println`, `printf`, etc.).
+
+**Using an existing adapter:**
 ```cpp
-// app_context.h
-struct MyAppContext {
-    Stream& serial;
-    // Add other peripherals here
+#include "mcli_arduino_serial.h"
+ArduinoSerialIo io(Serial);
+```
+
+**Creating a custom adapter:**
+```cpp
+class MyIOAdapter : public mcli::CliIoInterface {
+    // Implement put_byte(), get_byte(), byte_available()
 };
 ```
 
 ---
 
-### 2. Implement I/O Adapter
+### 2. Define Your Application Context
 
-The I/O adapter connects the CLI engine to your device’s communication interface, and handles sending and receiving characters in a way that matches your hardware or transport (like UART, USB, etc.). 
-
-Adapters extend the base `CliIoInterface` to add low-level communication info, while `CliIoInterface` provides higher level functionality (`print`, `println`, `printf`, etc.).
-
-The following implemented adapters are already provided:
-
-- **ArduinoSerialIo** (`platform_adapters/include/mcli/arduino_serial_io.h`) — works with any Arduino `Stream` such as `Serial` or `Serial1`
-
-
-You can alternatively create a custom I/O adapter for other platforms by extending `CliIoInterface` and implementing the required methods:
+The application context is a user-defined struct that holds references to all hardware interfaces, drivers, or other dependencies your CLI commands may need. This enables clean dependency injection, keeping commands modular and testable.
 
 ```cpp
-class MyAdapter : public mcli::CliIoInterface {
-    // Implement put_byte(), get_byte(), byte_available()
+// app_context.h
+struct MyAppContext {
+    MyIOAdapter& io; // Optional: include your IO adapter for in-function printing. 
+    Gpio& gpio;
+    Sensor& temp_sensor;
+    // Add other peripherals or variables here
 };
 ```
 
@@ -51,92 +65,122 @@ class MyAdapter : public mcli::CliIoInterface {
 
 ### 3. Create Commands
 
+The CLI operates on command functions that have the following signature: 
 ```cpp
-// app_commands.cpp
+void my_command(const mcli::CommandArgs args, MyAppContext* ctx);
+```
+
+**CommandArgs structure**
+```cpp
+struct CommandArgs {
+    int argc;                            // Number of arguments
+    char argv[MAX_ARGS][MAX_ARG_LENGTH]; // Argument strings
+};
+```
+
+**Example commands:**
+```cpp
 #include "mcli.h"
 
-void hello_cmd(const mcli::CommandArgs args, MyAppContext* ctx) {
-    ctx->serial.println("Hello from CLI!");
+void toggle_led(const mcli::CommandArgs args, MyAppContext* ctx) {
+    ctx->gpio.set(LED_ID, "ON");
 }
 
-const mcli::CommandDefinition<MyAppContext> commands[] = {
-    mcli::make_command("hello", hello_cmd, "Say hello"),
-};
+void read_temperature(const mcli::CommandArgs args, MyAppContext* ctx) {
+   uint32_t temp_celsius = ctx->temp_sensor.read_celsius();
+   ctx->io.printf("Temperature: %lu°C\n", temp_celsius);
+}
 
-constexpr size_t command_count = sizeof(commands) / sizeof(commands[0]);
+void print_args(const mcli::CommandArgs args, MyAppContext *ctx)
+	{
+		ctx->io.println("Command Test Demo\n");
+        ctx->io.printf("argc: %d\n", args.argc);
+		ctx->io.println("argv: ");
+		for(int i=0; i<args.argc; i++)
+		{
+			ctx->io.printf("%s ",args.argv[i]);
+		}
+	}
+```
+
+**Define your command table**
+```cpp
+const mcli::CommandDefinition<MyAppContext> commands[] = {
+    {"led",  toggle_led,       "Toggle LED state"},
+    {"temp", read_temperature, "Read temperature sensor"},
+    {"args", print_args,       "Print command arguments"}
+};
 ```
 
 ---
 
-### 4. Initialize and Run
+### 4. Put it All Together
 
+Arduino simple example
 ```cpp
 #include "mcli.h"
-#include "mcli/arduino_serial_io.h"
+#include "mcli_arduino_serial.h"
 
-MyAppContext ctx{Serial};
+// Initialize components
 ArduinoSerialIo io(Serial);
+Gpio gpio;
+Sensor temp_sensor; 
+MyAppContext ctx{io, gpio};
 
-mcli::CliEngine<MyAppContext> cli(io, ctx);
-cli.register_commands(commands, command_count);
+// Create CLI engine with components and command table
+mcli::CliEngine<MyAppContext> cli(io, ctx, commands);
+
+void setup() {
+    Serial.begin(9600);
+    gpio.init();
+    temp_sensor.init();
+}
 
 void loop() {
     cli.process_input();  // Call this regularly in your main loop
 }
 ```
+**That's it!** Your CLI is ready with an automatic `help` command alongside all your custom commands.
 
 ---
 
 ## Directory Structure
 
 ```text
-core/include/mcli/
+include/mcli/
 ├── mcli.h                   # Unified CLI types, engine, interface
 
-platform_adapters/include/mcli/
-└── arduino_serial_io.h      # Arduino Stream-based adapter
+include/adapters/
+└── mcli_arduino_serial.h    # Arduino Stream-based adapter
+└── mcli_esp32_uart.h        # ESP32 UART adapter (uses FreeRTOS driver)
+└── mcli_esp32_wifi_sta.h    # ESP32 WiFi STA adapter (uses FreeRTOS driver)
+```
+
+## Built-in Commands
+
+- `help` — Lists all available commands with descriptions
+
+---
+
+## Integration Options
+
+### Copy Files
+- Copy `mcli.h` and desired adapters to your project
+- Add to include path
+- Include in your code
+
+### Git Submodule
+
+```bash
+git submodule add https://github.com/ryanfkeller/mcli.git libs/mcli
 ```
 
 ---
 
-## API Overview
-
-### `mcli::CliEngine<ContextType>`
-
-- `CliEngine(CliIoInterface& io, ContextType& ctx, const char* prompt = "mcli> ")`
-- `void register_commands(...)`
-- `void process_input()` — Handles input from users
-- `bool execute_command(const char* line)` — Run commands programmatically
-- `void print_help()` — Built-in `help` command prints all registered commands
-
----
-
-### `mcli::CliIoInterface`
-
-To support any custom I/O transport, implement:
-
-- `put_byte(char)`
-- `get_byte()`
-- `byte_available()`
-
-You can also override:
-- `put_bytes(...)`, `get_bytes(...)`, `print(...)`, `printf(...)`, `send_prompt(...)`, `flush()`, `send_backspace()`, `clear_screen()`
-
----
-
-### Command Definition
-
-```cpp
-const mcli::CommandDefinition<MyContext> cmds[] = {
-    mcli::make_command("cmd", my_func, "Help text")
-};
-```
-
-Each command must follow the signature:
-
-```cpp
-void my_func(const mcli::CommandArgs args, MyContext* ctx);
-```
+**Scaling Estimates:**
+- **Arduino Uno/Nano**: Likely comfortable for 5-15 commands with basic functionality
+- **Arduino Mega**: Can handle 20+ complex commands with plenty of headroom
+- **ESP32/similar**: Memory usage becomes negligible compared to available resources
 
 ---
 
@@ -151,38 +195,8 @@ Defined in `mcli.h`:
 
 ---
 
-## Example Use Case
-
-- Works with Arduino or bare-metal platforms
-- UART/USB interface via `Stream`
-- Add LED toggle commands, sensor readouts, debug interfaces, and more
-
----
-
-## Integration Options
-
-### Copy Files
-
-- Copy files from `core/include/mcli/` and any `platform_adapters/include/mcli/` you need
-- Add them to your project include path
-
-### Git Submodule
-
-```bash
-git submodule add https://github.com/ryanfkeller/mcli.git libs/mcli
-```
-
-Include with:
-
-```cpp
-#include "mcli/mcli.h"
-#include "mcli/arduino_serial_io.h"
-```
-
----
-
 ## License
 
-MIT or similar — [insert license details here]
+MIT License — see LICENSE file for details
 
 ---
