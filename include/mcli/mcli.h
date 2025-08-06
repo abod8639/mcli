@@ -16,7 +16,7 @@ namespace mcli {
     constexpr int MAX_ARGS = 5;
     constexpr int MAX_ARG_LENGTH = 12;
     constexpr size_t CMD_BUFFER_SIZE = 128;
-    constexpr const char* DEFAULT_PROMPT = "mcli> ";
+    constexpr const char* DEFAULT_PROMPT = "\x1b[1mmcli> \x1b[0m";
 
     // Calculate total CommandArgs memory usage at compile time
     constexpr size_t COMMAND_ARGS_SIZE = sizeof(int) + (MAX_ARGS * MAX_ARG_LENGTH);
@@ -111,7 +111,7 @@ namespace mcli {
     
             if (len > 0) {
                 // Ensure null termination and handle truncation
-                if (len >= sizeof(buffer)) {
+                if (static_cast<uint32_t>(len) >= sizeof(buffer)) {
                     len = sizeof(buffer) - 1;
                     buffer[len] = '\0';
                 }
@@ -229,6 +229,15 @@ namespace mcli {
                     io_.println("  (No additional commands registered)");
                 }
                 io_.println();
+            }
+
+            // Reset CLI state between connections
+            void reset_session() {
+                // Clear input buffer
+                memset(input_buffer_, 0, sizeof(input_buffer_));
+                input_pos_ = 0;
+                last_line_char_ = 0;
+                prompt_sent_ = false;
             }
             
         private:
