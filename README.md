@@ -1,36 +1,43 @@
 # MCLI: Minimal Command-Line Interface for Embedded Systems
 
-A work-in-progress experiment in building a lightweight CLI library for constrained embedded systems.
+A lightweight CLI library for constrained embedded systems 
+- **Non-blocking**: Suitable for single-threaded apps without blocking the main loop
+- **No dynamic memory**: Uses static buffers only
+- **Hardware-agnostic**: Abstract IO interface supports various communication methods
 
-## What This Is
-An embedded command-line interface that targets bare-metal or resource constrained systems. The idea is to provide basic CLI functionality without requiring dynamic memory or heavy dependencies. 
+Packaged in are IO adapters for...
+- Arduino Serial Library
+- ESP32 UART
+- ESP32 STA Wifi
+- Microblaze V AXI Uartlite (soon)
 
-**Current state:** Early prototype that works for my use cases (i.e., dev boards I own). Arduino Serial, ESP32 UART, and ESP32 STA WiFi examples are available [here](). I'm working to make a UART adapter for the Microblaze V soft-core processor.
+## Examples:
 
-## Design Goals
-- **No Dynamic Memory:** The CLI engine itself only uses static buffers, though some platform adapters may use system services that allocate internally (ESP wifi, etc.) 
-- **Template-Based Context:** Inject your application context for cleaner, testable command functions
-- **Hardware Agnostic**: Abstracted IO interface that works with different communication methods
-- **Minimal Footprint**: Keep it small enough for microcontrollers.
+Several implemented examples can be found in the [mcli-examples](https://github.com/ryanfkeller/mcli-examples) repo. 
 
-## Example Usage
-ESP32 via WiFi STA:
+The GIF below shows the ESP32 WiFi CLI demo in action, featuring:
+* Telnet compatibility via PuTTy
+* Built-in `help` command
+* Custom command definitions
+* Connection recovery after disconnect
 
 ![ESP32 WiFi MCLI Example](https://github.com/ryanfkeller/mcli-examples/blob/main/assets/esp32_wifi_sta_mcli.gif "ESP32 WiFi MCLI Example")
 
-## Looking for Feedback On
+## 🙋 Help Wanted!
+
+I could use your feedback on how I can make this tool more useful for you. My focus areas for improvements:
 - Portability across different platforms
 - Memory optimization opportunities  
-- API design choices (especially the template approach)
-- Missing features that would make this more useful
+- API design clarity and consistency
+- Missing features you'd like to see
 
 Feel free to open issues or PRs with suggestions!
 
 ---
 
-## Basic Usage Example
+## Implementing this CLI in your Project
 
-### 1. Implement or Include an I/O Adapter
+### 1. Make or include an I/O Adapter
 
 The I/O adapter connects the CLI engine to your device’s communication interface 
 
@@ -51,7 +58,7 @@ class MyIOAdapter : public mcli::CliIoInterface {
 
 ---
 
-### 2. Define Your Application Context
+### 2. Define your application context
 
 The application context is a user-defined struct that holds references to all hardware interfaces, drivers, or other dependencies your CLI commands may need. This enables clean dependency injection, keeping commands modular and testable.
 
@@ -67,7 +74,7 @@ struct MyAppContext {
 
 ---
 
-### 3. Create Commands
+### 3. Create commands
 
 The CLI operates on command functions that have the following signature: 
 ```cpp
@@ -95,16 +102,15 @@ void read_temperature(const mcli::CommandArgs args, MyAppContext* ctx) {
    ctx->io.printf("Temperature: %lu°C\n", temp_celsius);
 }
 
-void print_args(const mcli::CommandArgs args, MyAppContext *ctx)
-	{
-		ctx->io.println("Command Test Demo\n");
-        ctx->io.printf("argc: %d\n", args.argc);
-		ctx->io.println("argv: ");
-		for(int i=0; i<args.argc; i++)
-		{
-			ctx->io.printf("%s ",args.argv[i]);
-		}
-	}
+void print_args(const mcli::CommandArgs args, MyAppContext *ctx) {
+   ctx->io.println("Command Test Demo\n");
+   ctx->io.printf("argc: %d\n", args.argc);
+   ctx->io.println("argv: ");
+   for(int i=0; i<args.argc; i++)
+   {
+      ctx->io.printf("%s ",args.argv[i]);
+   }
+}
 ```
 
 **Define your command table**
@@ -118,7 +124,7 @@ const mcli::CommandDefinition<MyAppContext> commands[] = {
 
 ---
 
-### 4. Put it All Together
+### 4. Bring it all together
 
 Arduino simple example
 ```cpp
@@ -144,7 +150,7 @@ void loop() {
     cli.process_input();  // Call this regularly in your main loop
 }
 ```
-**That's it!** Your CLI is ready with an automatic `help` command alongside all your custom commands.
+That's it! Your CLI is ready with an automatic `help` command alongside all your custom commands.
 
 ---
 
@@ -152,11 +158,11 @@ void loop() {
 
 ```text
 include/mcli/
-├── mcli.h                   # Unified CLI types, engine, interface
+└──mcli.h                   # Unified CLI types, engine, interface
 
 include/adapters/
-└── mcli_arduino_serial.h    # Arduino Stream-based adapter
-└── mcli_esp32_uart.h        # ESP32 UART adapter (uses FreeRTOS driver)
+├── mcli_arduino_serial.h    # Arduino Stream-based adapter
+├── mcli_esp32_uart.h        # ESP32 UART adapter (uses FreeRTOS driver)
 └── mcli_esp32_wifi_sta.h    # ESP32 WiFi STA adapter (uses FreeRTOS driver)
 ```
 
@@ -192,10 +198,13 @@ git submodule add https://github.com/ryanfkeller/mcli.git libs/mcli
 
 Defined in `mcli.h`:
 
-- `MAX_ARGS` – Max number of args (default: 5)
-- `MAX_ARG_LENGTH` – Max chars per arg (default: 16)
-- `CMD_BUFFER_SIZE` – Input buffer size (default: 128)
-- `DEFAULT_PROMPT` – Default prompt string (`"mcli> "`)
+| Constant          | Description            | Default  |
+| ----------------- | ---------------------- | -------- |
+| `MAX_ARGS`        | Max number of CLI args | 5        |
+| `MAX_ARG_LENGTH`  | Max chars per argument | 16       |
+| `CMD_BUFFER_SIZE` | Input buffer size      | 128      |
+| `DEFAULT_PROMPT`  | CLI prompt string      | `mcli> ` |
+
 
 ---
 
